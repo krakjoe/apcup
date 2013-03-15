@@ -45,12 +45,12 @@ extern zend_module_entry apcup_module_entry;
 /* {{{ structure definition:  apcup_cache_t */
 typedef struct  apcup_cache_t  apcup_cache_t;
 struct apcup_cache_t {
-    /* cache id */
+    /* unique id */
     int              id;
-    /* name (copied) */
+    /* name data (copied) */
     char*            name;
 	zend_uint        nlength;
-	/* cache pointer */
+	/* APCu cache */
 	apc_cache_t      cache;
 }; /* }}} */
 
@@ -60,7 +60,7 @@ typedef struct apcup_meta_t {
     apc_lock_t       lock;
     /* maximum number of caches */
     int              max;
-    /* next id for cache */
+    /* id of next cache */
     int              nid;
 } apcup_meta_t; /* }}} */
 

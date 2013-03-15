@@ -30,7 +30,7 @@
 ZEND_DECLARE_MODULE_GLOBALS(apcup)
 
 /* {{{ globals */
-apcup_t* apcup = NULL; /* }}} */
+apcup_t* apcup = {0}; /* }}} */
 
 /* {{{ quick tester */
 #define AP_IS_CACHE(id) (id > 0 && id < apcup->meta->nid) /* }}} */
@@ -231,10 +231,12 @@ static inline zend_bool apcup_create_cache(char *name,
 		    if (create) {
 			    /* create cache */
 			    {
+			        //apc_sma_t* sma, apc_serializer_t* serializer, int size_hint, int gc_ttl, int ttl, long smart, zend_bool defend TSRMLS_DC
+			        
 			        /* apc allocates using local malloc() */
 			        apc_cache_t* apc = apc_cache_create(
 			            &apcups,
-			            NULL, /* TODO XXX no serializer support, we are only testing */ 
+			            0,
 			            entries_hint,
 			            gc_ttl, ttl,
 			            smart,
@@ -245,7 +247,7 @@ static inline zend_bool apcup_create_cache(char *name,
 			            /* copy to shm */
 			            create->cache = *apc;
 			            /* free original pointer */
-			            apc_efree(apc);
+			            apc_efree(apc TSRMLS_CC);
 			        } else goto failure;
 			    }
 			
@@ -353,9 +355,9 @@ static inline zend_bool apcup_startup(zend_uint mod TSRMLS_DC) {
                         apcup->meta->max = APG(caches);
                         
 	                    /* point list at end of meta */
-	                    apcup->list = (apcup_cache_t**) (((char*) apcup->shm) + sizeof(apcup_meta_t));
-	                    
-	                    return 1;
+                        apcup->list = (apcup_cache_t**) (((char*) apcup->shm) + sizeof(apcup_meta_t));
+                    
+                        return 1;
                     } else return 0;
                 } else return 0;
             } else return 0;
@@ -431,6 +433,8 @@ static void php_apcup_init_globals(zend_apcup_globals *apcup_globals)
  */
 PHP_MINIT_FUNCTION(apcup)
 {
+	ZEND_INIT_MODULE_GLOBALS(apcup, php_apcup_init_globals, NULL);
+	
 	REGISTER_INI_ENTRIES();
     
     if (!apcup_startup(module_number TSRMLS_CC))
