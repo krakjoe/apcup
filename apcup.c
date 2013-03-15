@@ -212,8 +212,6 @@ static inline zend_bool apcup_create_cache(char *name,
                                             zend_bool slam_defense TSRMLS_DC) {
     zend_bool result = 0;
     
-    int id = 0;
-    
     HANDLE_BLOCK_INTERRUPTIONS();
     
     APC_LOCK(apcup->meta);
@@ -222,7 +220,7 @@ static inline zend_bool apcup_create_cache(char *name,
     if (apcup->meta->nid < apcup->meta->max) {
     
         /* ensure this cache is not created twice */
-        id = apcup_cache_id(name, nlength TSRMLS_CC);
+        int id = apcup_cache_id(name, nlength TSRMLS_CC);
         
         /* continue if there is no result */
 	    if (id == -1) {
