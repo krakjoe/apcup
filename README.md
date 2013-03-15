@@ -12,7 +12,7 @@ Quick How To
 ============
 
 You provide names for your caches, which are then registered as constants and returned, throughout execution you reference the constant id
-so we can read list unlocked, for very fast access to multiple caches concurrently
+so we can read list unlocked, for very fast access to multiple caches concurrently (so long as your system is supporting read/write locks)
 
 Here is the prototype for apcup_create():
     long apcup_create(string name [, long entries_hint = 1024, [ long gc_ttl = 0, [ long ttl = 0, [ long smart = 0, [ bool slam_defense = true]]]]])
@@ -45,6 +45,3 @@ Example:
         ```
 
 This is an experiment, that is all ...
-    
-    
-    

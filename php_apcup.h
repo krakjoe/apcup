@@ -93,15 +93,25 @@ PHP_FUNCTION(apcup_clear); /* }}} */
 
 ZEND_BEGIN_MODULE_GLOBALS(apcup)
 	/*
-	* the size of shared memory for all pooled caches
-	* Default: (32MB) 
+	* the size of a shared segment
+	* Default: (32MB)
 	*/
 	long         shared;
+	/*
+	* the number of segments to use
+	* Default: (1)
+	*/
+	long         segments;
 	/*
 	* mask for mmap
 	* Default: (null)
 	*/
 	char*        mask;
+	/*
+	* maximum number of caches expected
+	* Default: (8)
+	*/
+	long         caches;
 	
 	/*
 	* The remainder of globals are used internally

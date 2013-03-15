@@ -91,10 +91,13 @@ ZEND_GET_MODULE(apcup)
  */
 PHP_INI_BEGIN()
     /*
-    * This is not adjustable at runtime
+    * These are not adjustable at runtime
     */
-    STD_PHP_INI_ENTRY("apcup.shared", "32", PHP_INI_SYSTEM, OnUpdateLong, shared, zend_apcup_globals, apcup_globals)
-    STD_PHP_INI_ENTRY("apcup.mask", "32", PHP_INI_SYSTEM, OnUpdateString, mask, zend_apcup_globals, apcup_globals)
+    STD_PHP_INI_ENTRY("apcup.shared",    "32",    PHP_INI_SYSTEM, OnUpdateLong,    shared,    zend_apcup_globals, apcup_globals)
+    STD_PHP_INI_ENTRY("apcup.segments",  "1",     PHP_INI_SYSTEM, OnUpdateLong,    segments,  zend_apcup_globals, apcup_globals)
+    STD_PHP_INI_ENTRY("apcup.mask",      NULL,    PHP_INI_SYSTEM, OnUpdateString,  mask,      zend_apcup_globals, apcup_globals)
+    
+    STD_PHP_INI_ENTRY("apcup.caches",    "8",     PHP_INI_SYSTEM, OnUpdateLong,    caches,    zend_apcup_globals, apcup_globals)
     /* other ini entries here */
 PHP_INI_END()
 /* }}} */
@@ -111,7 +114,6 @@ static inline int apcup_cache_id(char* name, zend_uint nlength TSRMLS_DC) {
         while (current < end) {
             if (apcup->list[current]) {
                 if (strncmp(name, apcup->list[current]->name, nlength) == SUCCESS) {
-                    zend_error(E_WARNING, "returning %d for %s", apcup->list[current]->id, name);
                     return apcup->list[current]->id;
                 }
                 current++;
@@ -130,7 +132,6 @@ static inline apcup_cache_t* apcup_cache_find(zend_uint id TSRMLS_DC) {
     {
         while (current < end) {
             if (apcup->list[current]->id == id) {
-                zend_error(E_WARNING, "returning %s for %d", apcup->list[current]->name, id);
                 return apcup->list[current];
             }
             current++;
@@ -141,10 +142,10 @@ static inline apcup_cache_t* apcup_cache_find(zend_uint id TSRMLS_DC) {
 
 /*
  * apcup_create_cache
- * returns a constant id for a cache
+ * returns indication of success
  * if the cache does not exist, it is registered
- * if the cache exists, the constant id of the cache will be returned
- * in any case of failure a zero value is returned
+ * if the cache exists, it's constant id will be registered in this context
+ * in any case of failure false is returned
  *
  * @name the name of the cache, something constant friendly
  * @nlength the length of the data in name
@@ -174,7 +175,7 @@ static inline zend_bool apcup_create_cache(char *name,
     /* continue if there is no result and is a list */
 	if (id == -1) {
 	    
-	    /* increment id */
+	    /* allocate new pooled cache struct in shm */
 	    apcup_cache_t* create = apcups.malloc(sizeof(apcup_cache_t) TSRMLS_CC);
 	    
 		if (create) {
@@ -258,27 +259,29 @@ static inline zend_bool apcup_startup(zend_uint mod TSRMLS_DC) {
         if (!APG(initialized)) {
             /* only once */
             APG(initialized) = 1;
-                        
+            
+            /* main object initialization */
             apcup = apc_emalloc(sizeof(apcup_t) TSRMLS_CC);
             
             if (apcup) {
+            
                 /* initialize locking */
                 apc_lock_init(TSRMLS_C);
 
                 /* initialize sma */
                 apcups.init(
-                    1, 1024 * 1024 * APG(shared), NULL TSRMLS_CC);
+                    APG(segments), 1024 * 1024 * APG(shared), APG(mask) TSRMLS_CC);
                 
                 /* set size */
-                apcup->size = (sizeof(apcup_cache_t*) * (APG(shared)/4)) + sizeof(apcup_meta_t);
+                apcup->size = (sizeof(apcup_cache_t*) * APG(caches)) + sizeof(apcup_meta_t);
                 
                 /* allocate shm */
                 apcup->shm = apcups.malloc(apcup->size TSRMLS_CC);
                 
-                /* zero shm, makes for easier debug */
-                memset(apcup->shm, 0, apcup->size);
-                
                 if (apcup->shm) {
+                    /* zero shm, makes for easier debug */
+                    memset(apcup->shm, 0, apcup->size);
+                
                     /* set meta at start of shm */
                     apcup->meta = (apcup_meta_t*) apcup->shm;
                     
@@ -290,7 +293,7 @@ static inline zend_bool apcup_startup(zend_uint mod TSRMLS_DC) {
                         apcup->meta->nid = 1;
                         
                         /* maximum number of caches */
-                        apcup->meta->max = (APG(shared)/4);
+                        apcup->meta->max = APG(caches);
                         
 	                    /* point list at end of meta */
 	                    apcup->list = (apcup_cache_t**) (((char*) apcup->shm) + sizeof(apcup_meta_t));
