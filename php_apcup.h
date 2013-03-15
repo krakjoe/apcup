@@ -56,8 +56,6 @@ struct apcup_cache_t {
 typedef struct apcup_t {
 	/* lock for object */
     apc_lock_t       lock;
-    /* module number */
-    zend_uint        mod;
 	/* id of next cache */
 	int              next;
 	/* list of caches */

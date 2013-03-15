@@ -30,11 +30,11 @@
 ZEND_DECLARE_MODULE_GLOBALS(apcup)
 
 /* {{{ globals */
-static apcup_t apcup; /* }}} */
+apcup_t* apcup = NULL; /* }}} */
 
 /* {{{ quick accessor */
 #define AP(id) \
-    apcup.list[id] /* }}} */
+    apcup->list[id] /* }}} */
 
 /* {{{ quick accessor */
 #define AP_CACHE(id) \
@@ -45,16 +45,16 @@ static apcup_t apcup; /* }}} */
     AP(id)->name /* }}} */
     
 /* {{{ quick tester */
-#define AP_IS_CACHE(id) (id < apcup.next) /* }}} */
+#define AP_IS_CACHE(id) (id < apcup->next) /* }}} */
 
 /* {{{ apcup_expunge: run when apcups is low on memory */
-void apcup_gc(apcup_cache_t** list TSRMLS_DC) {
+void apcup_gc(apcup_t* apcup TSRMLS_DC) {
     zend_error(
         E_ERROR, "gc is not implemented yet, we are testing !!");
 } /* }}} */
 
 /* {{{ implement sma */
-apc_sma_api_impl(apcups, &apcup.list, apcup_gc); /* }}} */
+apc_sma_api_impl(apcups, &apcup, apcup_gc); /* }}} */
 
 ZEND_BEGIN_ARG_INFO_EX(apcup_create_arginfo, 0, 0, 1)
     ZEND_ARG_INFO(0, name)
@@ -105,7 +105,7 @@ PHP_INI_BEGIN()
     /*
     * This is not adjustable at runtime
     */
-    STD_PHP_INI_ENTRY("apcup.shared", "32", PHP_INI_SYSTEM, OnUpdateLong, shared, zend_apcup_globals, apcup_globals)
+    STD_PHP_INI_ENTRY("apcup->shared", "32", PHP_INI_SYSTEM, OnUpdateLong, shared, zend_apcup_globals, apcup_globals)
     
     /* other ini entries here */
 PHP_INI_END()
@@ -118,7 +118,7 @@ PHP_INI_END()
  * will return 0L if not found
  */
 static inline int apcup_cache_id(char* name, zend_uint nlength TSRMLS_DC) {
-    int current = 0, end = apcup.next;
+    int current = 0, end = apcup->next;
     {
         while (current < end) {
             if (strncmp(name, AP_NAME(current), nlength) == SUCCESS) {
@@ -156,7 +156,7 @@ static inline zend_bool apcup_create_cache(char *name,
     
     int id = 0;
     
-    APC_LOCK(&apcup);
+    APC_LOCK(apcup);
     
     /* ensure this cache is not created twice */
     id = apcup_cache_id(name, nlength TSRMLS_CC);
@@ -165,11 +165,11 @@ static inline zend_bool apcup_create_cache(char *name,
 	if (id == -1) {
 	    
 	    /* increment id */
-	    apcup.list[apcup.next] = apcups.malloc(sizeof(apcup_cache_t) TSRMLS_CC);
+	    apcup->list[apcup->next] = apcups.malloc(sizeof(apcup_cache_t) TSRMLS_CC);
 	    
-		if (apcup.list[apcup.next]) {
+		if (apcup->list[apcup->next]) {
 			/* create cache */
-			apcup.list[apcup.next]->cache = apc_cache_create(
+			apcup->list[apcup->next]->cache = apc_cache_create(
 			    &apcups, 
 			    NULL, /* TODO XXX no serializer support, we are only testing */ 
 			    entries_hint, 
@@ -179,20 +179,20 @@ static inline zend_bool apcup_create_cache(char *name,
 			);
 			
 			/* check we are not failures */
-			if (!apcup.list[apcup.next]->cache) {
+			if (!apcup->list[apcup->next]->cache) {
                 goto failure;
 			}
 			
 			/* set name */
-			apcup.list[apcup.next]->name = apc_xmemcpy(
+			apcup->list[apcup->next]->name = apc_xmemcpy(
 				name, nlength, apcups.malloc TSRMLS_CC);
-			apcup.list[apcup.next]->nlength = nlength;
+			apcup->list[apcup->next]->nlength = nlength;
 			
 			/* register constant id for cache as user */
 			zend_register_long_constant(
-			    apcup.list[apcup.next]->name, 
-			    apcup.list[apcup.next]->nlength+1, 
-			    apcup.next, 
+			    apcup->list[apcup->next]->name, 
+			    apcup->list[apcup->next]->nlength+1, 
+			    apcup->next, 
 			    CONST_CS, PHP_USER_CONSTANT TSRMLS_CC
 			);
 			
@@ -200,7 +200,7 @@ static inline zend_bool apcup_create_cache(char *name,
 			result = 1;
 			
 			/* move forward */
-			apcup.next++;
+			apcup->next++;
 		}
 	} else {
 	    /* register constant id for cache as user */
@@ -209,7 +209,7 @@ static inline zend_bool apcup_create_cache(char *name,
 	    result = 1;
 	}
 	
-	APC_UNLOCK(&apcup);
+	APC_UNLOCK(apcup);
 	
 	return result;
 
@@ -219,7 +219,7 @@ failure:
         "APCu failed to create the requested cache (%s), do you have enough resources ?",
         name
     );
-    APC_UNLOCK(&apcup);
+    APC_UNLOCK(apcup);
     
     return 0;
 }
@@ -229,14 +229,20 @@ failure:
 */
 static inline zend_bool apcup_startup(zend_uint mod TSRMLS_DC) {
     /* make sure we do not initialize twice */
-	if (++apcup.refcount > 1) 
-		return 1;
-		
-    /* set module number */
-    apcup.mod = mod;
+	if (apcup) {
+	    apcup->refcount++;
+	    
+	    return 1;
+	}
+	
+	/* allocate apcup locally */
+    apcup = apc_emalloc(sizeof(apcup_t) TSRMLS_CC);
+
+    /* refcount */
+    apcup->refcount = 1;
 
     /* set next id to nothing */
-	apcup.next = 0;    
+	apcup->next = 0; 
     
     /* initialize locking */
     apc_lock_init(TSRMLS_C);
@@ -246,13 +252,13 @@ static inline zend_bool apcup_startup(zend_uint mod TSRMLS_DC) {
         1, 1024 * 1024 * APG(shared), NULL TSRMLS_CC);
     
     /* create a lock for safety */
-    CREATE_LOCK(&apcup.lock);
+    CREATE_LOCK(&apcup->lock);
 
 	/* allocate list structure */
-    apcup.list = apcups.malloc(sizeof(apcup_cache_t**) TSRMLS_CC);
+    apcup->list = apcups.malloc(sizeof(apcup_cache_t**) TSRMLS_CC);
     
     /* indicate we failed */
-    if (!apcup.list)
+    if (!apcup->list)
         return 0;
 
 	return 1;
@@ -263,30 +269,30 @@ static inline zend_bool apcup_startup(zend_uint mod TSRMLS_DC) {
 */
 static inline void apcup_shutdown(TSRMLS_D) {
     /* apcup shutdown */
-	APC_LOCK(&apcup);
+	APC_LOCK(apcup);
     {
-        if (--apcup.refcount == 0) {
-            int current = 0, end = apcup.next;
+        if (--apcup->refcount == 0) {
+            int current = 0, end = apcup->next;
             
             while (current < end) {
-                apc_cache_destroy(apcup.list[current]->cache TSRMLS_CC);
-                if (apcup.list[current]->name) {
-                     apcups.free(apcup.list[current]->name TSRMLS_CC);
+                apc_cache_destroy(apcup->list[current]->cache TSRMLS_CC);
+                if (apcup->list[current]->name) {
+                     apcups.free(apcup->list[current]->name TSRMLS_CC);
                 }
                 current++;
             }
             
             /* free list */
-            apcups.free(apcup.list TSRMLS_CC);
+            apcups.free(apcup->list TSRMLS_CC);
             
             /* null items */
-            apcup.list = NULL;
+            apcup->list = NULL;
         } else goto nothing;
     }
-    APC_UNLOCK(&apcup);
+    APC_UNLOCK(apcup);
 
     /* destroy this */
-    DESTROY_LOCK(&apcup.lock);
+    DESTROY_LOCK(&apcup->lock);
     
     /* cleanup sma */
     apcups.cleanup(TSRMLS_C);
@@ -294,7 +300,7 @@ static inline void apcup_shutdown(TSRMLS_D) {
     return;
     
 nothing:
-    APC_UNLOCK(&apcup);
+    APC_UNLOCK(apcup);
     
     return;
 }
@@ -314,7 +320,7 @@ PHP_MINIT_FUNCTION(apcup)
 	REGISTER_INI_ENTRIES();
     
     if (!apcup_startup(module_number TSRMLS_CC))
-		zend_error(E_ERROR, "APCu pooling failed to startup, try raising apcup.shared");
+		zend_error(E_ERROR, "APCu pooling failed to startup, try raising apcup->shared");
 
 	return SUCCESS;
 }
