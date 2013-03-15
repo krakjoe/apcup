@@ -169,68 +169,78 @@ static inline zend_bool apcup_create_cache(char *name,
     
     APC_LOCK(apcup->meta);
     
-    /* ensure this cache is not created twice */
-    id = apcup_cache_id(name, nlength TSRMLS_CC);
+    /* ensure we are within limits */
+    if (apcup->meta->nid < apcup->meta->max) {
     
-    /* continue if there is no result and is a list */
-	if (id == -1) {
-	    
-	    /* allocate new pooled cache struct in shm */
-	    apcup_cache_t* create = apcups.malloc(sizeof(apcup_cache_t) TSRMLS_CC);
-	    
-		if (create) {
-			/* create cache */
-			{
-			    /* apc allocates using local malloc() */
-			    apc_cache_t* apc = apc_cache_create(
-			        &apcups,
-			        NULL, /* TODO XXX no serializer support, we are only testing */ 
-			        entries_hint,
-			        gc_ttl, ttl,
-			        smart,
-			        slam_defense TSRMLS_CC
+        /* ensure this cache is not created twice */
+        id = apcup_cache_id(name, nlength TSRMLS_CC);
+        
+        /* continue if there is no result */
+	    if (id == -1) {
+	        
+	        /* allocate new pooled cache object in shm */
+	        apcup_cache_t* create = apcups.malloc(sizeof(apcup_cache_t) TSRMLS_CC);
+	        
+		    if (create) {
+			    /* create cache */
+			    {
+			        /* apc allocates using local malloc() */
+			        apc_cache_t* apc = apc_cache_create(
+			            &apcups,
+			            NULL, /* TODO XXX no serializer support, we are only testing */ 
+			            entries_hint,
+			            gc_ttl, ttl,
+			            smart,
+			            slam_defense TSRMLS_CC
+			        );
+			        
+			        if (apc) {
+			            /* copy to shm */
+			            create->cache = *apc;
+			            /* free original pointer */
+			            apc_efree(apc);
+			        } else goto failure;
+			    }
+			
+			    /* set name */
+			    create->name = apc_xmemcpy(
+				    name, nlength, apcups.malloc TSRMLS_CC);
+			    create->nlength = nlength;
+			
+			    /* set id */
+			    create->id = (apcup->meta->nid)++;
+			
+			    /* register constant id for cache as user */
+			    zend_register_long_constant(
+			        create->name, 
+			        create->nlength+1, 
+			        create->id, 
+			        CONST_CS, PHP_USER_CONSTANT TSRMLS_CC
 			    );
-			    
-			    if (apc) {
-			        /* copy to shm */
-			        create->cache = *apc;
-			        /* free original pointer */
-			        apc_efree(apc);
-			    } else goto failure;
-			}
 			
-			/* set name */
-			create->name = apc_xmemcpy(
-				name, nlength, apcups.malloc TSRMLS_CC);
-			create->nlength = nlength;
+			    /* set result */
+			    result = 1;
 			
-			/* set id */
-			create->id = (apcup->meta->nid)++;
-			
-			/* register constant id for cache as user */
-			zend_register_long_constant(
-			    create->name, 
-			    create->nlength+1, 
-			    create->id, 
-			    CONST_CS, PHP_USER_CONSTANT TSRMLS_CC
-			);
-			
-			/* set result */
-			result = 1;
-			
-			/* set position */
-			apcup->list[create->id - 1] = create;
-		}
-	} else {
-	    /* register constant id for cache as user */
-	    zend_register_long_constant(
-	        name, nlength+1, 
-	        id, 
-	        CONST_CS, PHP_USER_CONSTANT TSRMLS_CC
-	    );
-	    
-	    result = 1;
-	}
+			    /* set position */
+			    apcup->list[create->id - 1] = create;
+		    }
+	    } else {
+	        /* register constant id for cache as user */
+	        zend_register_long_constant(
+	            name, nlength+1, 
+	            id, 
+	            CONST_CS, PHP_USER_CONSTANT TSRMLS_CC
+	        );
+	        
+	        result = 1;
+	    }
+    } else {
+        zend_error(
+            E_WARNING, 
+            "APCu cannot create any more caches, consider raising the maximum (%d)",
+            apcup->meta->max
+        );
+    }
 	
 	APC_UNLOCK(apcup->meta);
 	
@@ -240,7 +250,7 @@ static inline zend_bool apcup_create_cache(char *name,
 
 failure:
     zend_error(
-        E_ERROR, 
+        E_WARNING, 
         "APCu failed to create the requested cache (%s), do you have enough resources ?",
         name
     );
