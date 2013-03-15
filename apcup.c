@@ -156,13 +156,15 @@ PHP_INI_END()
 static inline int apcup_cache_id(char* name, zend_uint nlength TSRMLS_DC) {
     int current = 0, end = apcup->meta->nid;
     {
-        while (current < end) {
-            if (apcup->list[current]) {
-                if (strncmp(name, apcup->list[current]->name, nlength) == SUCCESS) {
-                    return apcup->list[current]->id;
-                }
-                current++;
-            } else break;
+        if (end > 1) {
+            while (current < end) {
+                if (apcup->list[current]) {
+                    if (strncmp(name, apcup->list[current]->name, nlength) == SUCCESS) {
+                        return apcup->list[current]->id;
+                    }
+                    current++;
+                } else break;
+            }
         }
     }
     return -1;
@@ -175,11 +177,13 @@ static inline int apcup_cache_id(char* name, zend_uint nlength TSRMLS_DC) {
 static inline apcup_cache_t* apcup_cache_find(zend_uint id TSRMLS_DC) {
     int current = 0, end = apcup->meta->nid;
     {
-        while (current < end) {
-            if (apcup->list[current]->id == id) {
-                return apcup->list[current];
+        if (end > 1) {
+            while (current < end) {
+                if (apcup->list[current]->id == id) {
+                    return apcup->list[current];
+                }
+                current++;
             }
-            current++;
         }
     }
     return NULL;
@@ -376,16 +380,18 @@ static inline void apcup_shutdown(TSRMLS_D) {
                 {
                     int current = 0, end = apcup->meta->nid;
                     
-                    while (current < end) {
-                        if (apcup->list[current]) {
-                            DESTROY_LOCK(&apcup->list[current]->cache.header->lock);
+                    if (end > 1) {
+                        while (current < end) {
+                            if (apcup->list[current]) {
+                                DESTROY_LOCK(&apcup->list[current]->cache.header->lock);
+                                
+                                if (apcup->list[current]->name) {
+                                    apcups.free(apcup->list[current]->name TSRMLS_CC);
+                                }
+                            } else break;
                             
-                            if (apcup->list[current]->name) {
-                                apcups.free(apcup->list[current]->name TSRMLS_CC);
-                            }
-                        } else break;
-                        
-                        current++;
+                            current++;
+                        }
                     }
                 }
             }
