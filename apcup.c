@@ -41,15 +41,20 @@ void apcup_gc(apcup_t* runtime, size_t size TSRMLS_DC) {
         /* this might seem harsh ... */
         APC_LOCK(runtime->meta);
         {
-            int current = 0, end = runtime->meta->nid;
+            int current = 0, 
+                end = runtime->meta->nid,
+                factor = (runtime->meta->nid > 2) ? (runtime->meta->nid - 1) : (1);
+            /* run expunge on all caches created so far */
             {
                 while (current < end) {
-                    apc_cache_default_expunge(
-                        &runtime->list[current]->cache,
-                        /* this makes a guestimate,
-                            spreading the weight of gc across all caches */
-                        size / (runtime->meta->nid - 1) TSRMLS_CC
-                    );
+                    if (runtime->list[current]) {
+                        apc_cache_default_expunge(
+                            &runtime->list[current]->cache,
+                            /* this makes a guestimate,
+                                spreading the weight of gc across all caches */
+                            (size / factor) TSRMLS_CC
+                        );
+                    } else break;
                     current++;
                 }
             }
