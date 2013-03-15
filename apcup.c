@@ -369,8 +369,10 @@ static inline void apcup_shutdown(TSRMLS_D) {
  */
 static void php_apcup_init_globals(zend_apcup_globals *apcup_globals)
 {
-	apcup_globals->shared = 16;
+    apcup_globals->shared = 32;
+    apcup_globals->segments = 1;
 	apcup_globals->mask = NULL;
+	apcup_globals->caches = 8;
 	
 	apcup_globals->initialized = 0;
 }
