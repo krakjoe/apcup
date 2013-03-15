@@ -35,15 +35,33 @@ apcup_t* apcup = NULL; /* }}} */
 /* {{{ quick tester */
 #define AP_IS_CACHE(id) (id > 0 && id < apcup->meta->nid) /* }}} */
 
-/* {{{ apcup_expunge: run when apcups is low on memory */
-void apcup_gc(apcup_t* apcup TSRMLS_DC) {
-    zend_error(
-        E_ERROR, "gc is not implemented yet, we are testing !!");
+/* {{{ apcup_gc: run when apcups is low on memory */
+void apcup_gc(apcup_t* runtime, size_t size TSRMLS_DC) {
+    if (runtime && runtime->meta) {
+        /* this might seem harsh ... */
+        APC_LOCK(runtime->meta);
+        {
+            int current = 0, end = runtime->meta->nid;
+            {
+                while (current < end) {
+                    apc_cache_default_expunge(
+                        &runtime->list[current]->cache,
+                        /* this makes a guestimate,
+                            spreading the weight of gc across all caches */
+                        size / (runtime->meta->nid - 1) TSRMLS_CC
+                    );
+                    current++;
+                }
+            }
+        }
+        APC_UNLOCK(runtime->meta);
+    }
 } /* }}} */
 
 /* {{{ implement sma */
 apc_sma_api_impl(apcups, &apcup, apcup_gc); /* }}} */
 
+/* {{{ arginfo */
 ZEND_BEGIN_ARG_INFO_EX(apcup_create_arginfo, 0, 0, 1)
     ZEND_ARG_INFO(0, name)
     ZEND_ARG_INFO(0, entries_hint)
@@ -53,13 +71,33 @@ ZEND_BEGIN_ARG_INFO_EX(apcup_create_arginfo, 0, 0, 1)
     ZEND_ARG_INFO(0, slam_defense)
 ZEND_END_ARG_INFO()
 
+ZEND_BEGIN_ARG_INFO_EX(apcup_get_arginfo, 0, 0, 2)
+    ZEND_ARG_INFO(0, cache)
+    ZEND_ARG_INFO(0, key)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_INFO_EX(apcup_set_arginfo, 0, 0, 3)
+    ZEND_ARG_INFO(0, cache)
+    ZEND_ARG_INFO(0, key)
+    ZEND_ARG_INFO(0, value)
+    ZEND_ARG_INFO(0, ttl)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_INFO_EX(apcup_info_arginfo, 0, 0, 1)
+    ZEND_ARG_INFO(0, cache)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_INFO_EX(apcup_clear_arginfo, 0, 0, 1)
+    ZEND_ARG_INFO(0, cache)
+ZEND_END_ARG_INFO() /* }}} */
+
 /* {{{ apcup_functions[] */
 const zend_function_entry apcup_functions[] = {
 	PHP_FE(apcup_create, apcup_create_arginfo)
-	PHP_FE(apcup_get,    NULL)
-	PHP_FE(apcup_set,    NULL)
-	PHP_FE(apcup_info,    NULL)
-	PHP_FE(apcup_clear,  NULL)
+	PHP_FE(apcup_get,    apcup_get_arginfo)
+	PHP_FE(apcup_set,    apcup_set_arginfo)
+	PHP_FE(apcup_info,   apcup_info_arginfo)
+	PHP_FE(apcup_clear,  apcup_clear_arginfo)
 	PHP_FE_END
 }; /* }}} */
 
@@ -437,7 +475,7 @@ PHP_FUNCTION(apcup_create)
     }
 } /* }}} */
 
-/* {{{ proto boolean apcup_set(long cache, string name, mixed value, [, long ttl])
+/* {{{ proto boolean apcup_set(long cache, string key, mixed value, [, long ttl])
    Sets a value in the specific cache 
    Returns true on success */
 PHP_FUNCTION(apcup_set)
@@ -468,7 +506,7 @@ unlock:
     }
 } /* }}} */
 
-/* {{{ proto mixed apcup_get(long cache, string name) 
+/* {{{ proto mixed apcup_get(long cache, string key) 
   Get a value from a specific cache */
 PHP_FUNCTION(apcup_get)
 {
