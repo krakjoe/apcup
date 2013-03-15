@@ -45,23 +45,35 @@ extern zend_module_entry apcup_module_entry;
 /* {{{ structure definition:  apcup_cache_t */
 typedef struct  apcup_cache_t  apcup_cache_t;
 struct apcup_cache_t {
+    /* cache id */
+    int              id;
     /* name (copied) */
     char*            name;
 	zend_uint        nlength;
 	/* cache pointer */
-	apc_cache_t*     cache;
+	apc_cache_t      cache;
 }; /* }}} */
+
+/* {{{ structure definition: apcup_meta_t */
+typedef struct apcup_meta_t {
+    /* lock for object */
+    apc_lock_t       lock;
+    /* maximum number of caches */
+    int              max;
+    /* next id for cache */
+    int              nid;
+} apcup_meta_t; /* }}} */
 
 /* {{{ struct definition: apcup_t */
 typedef struct apcup_t {
-	/* lock for object */
-    apc_lock_t       lock;
-	/* id of next cache */
-	int              next;
-	/* list of caches */
+    /* shared memory */
+    void*            shm;
+    /* shared meta */
+    apcup_meta_t*    meta;
+	/* shared caches */
     apcup_cache_t**  list;
-    /* refcount */
-    volatile zend_ulong refcount;
+    /* size of apcup */
+    int size;
 } apcup_t; /* }}} */
 
 /* {{{ apcup shared memory */
@@ -84,7 +96,17 @@ ZEND_BEGIN_MODULE_GLOBALS(apcup)
 	* the size of shared memory for all pooled caches
 	* Default: (32MB) 
 	*/
-	zend_ulong   shared;
+	long         shared;
+	/*
+	* mask for mmap
+	* Default: (null)
+	*/
+	char*        mask;
+	
+	/*
+	* The remainder of globals are used internally
+	*/
+	zend_bool    initialized;
 ZEND_END_MODULE_GLOBALS(apcup)
 
 #ifdef ZTS

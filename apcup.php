@@ -9,6 +9,7 @@ echo "<pre>";
 if (extension_loaded("apcup")) {
     /* registers constant id, given some params */
 	var_dump(apcup_create("APCUP_DEFAULT", 2048, 7020, 7020));
+		var_dump(apcup_create("APCUP_DEFAULT", 2048, 7020, 7020));
     var_dump(apcup_create("APCUP_OTHER", 2048, 7020, 7020));
     
 	var_dump(APCUP_DEFAULT);

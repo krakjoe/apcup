@@ -32,20 +32,8 @@ ZEND_DECLARE_MODULE_GLOBALS(apcup)
 /* {{{ globals */
 apcup_t* apcup = NULL; /* }}} */
 
-/* {{{ quick accessor */
-#define AP(id) \
-    apcup->list[id] /* }}} */
-
-/* {{{ quick accessor */
-#define AP_CACHE(id) \
-    AP(id)->cache /* }}} */
-    
-/* {{{ quick accessor */
-#define AP_NAME(id) \
-    AP(id)->name /* }}} */
-    
 /* {{{ quick tester */
-#define AP_IS_CACHE(id) (id < apcup->next) /* }}} */
+#define AP_IS_CACHE(id) (id > 0 && id < apcup->meta->nid) /* }}} */
 
 /* {{{ apcup_expunge: run when apcups is low on memory */
 void apcup_gc(apcup_t* apcup TSRMLS_DC) {
@@ -105,8 +93,8 @@ PHP_INI_BEGIN()
     /*
     * This is not adjustable at runtime
     */
-    STD_PHP_INI_ENTRY("apcup->shared", "32", PHP_INI_SYSTEM, OnUpdateLong, shared, zend_apcup_globals, apcup_globals)
-    
+    STD_PHP_INI_ENTRY("apcup.shared", "32", PHP_INI_SYSTEM, OnUpdateLong, shared, zend_apcup_globals, apcup_globals)
+    STD_PHP_INI_ENTRY("apcup.mask", "32", PHP_INI_SYSTEM, OnUpdateString, mask, zend_apcup_globals, apcup_globals)
     /* other ini entries here */
 PHP_INI_END()
 /* }}} */
@@ -118,17 +106,37 @@ PHP_INI_END()
  * will return 0L if not found
  */
 static inline int apcup_cache_id(char* name, zend_uint nlength TSRMLS_DC) {
-    int current = 0, end = apcup->next;
+    int current = 0, end = apcup->meta->nid;
     {
         while (current < end) {
-            if (strncmp(name, AP_NAME(current), nlength) == SUCCESS) {
-                return current;
-            }
-            
-            current++;
+            if (apcup->list[current]) {
+                if (strncmp(name, apcup->list[current]->name, nlength) == SUCCESS) {
+                    zend_error(E_WARNING, "returning %d for %s", apcup->list[current]->id, name);
+                    return apcup->list[current]->id;
+                }
+                current++;
+            } else break;
         }
     }
     return -1;
+}
+
+/*
+ * apcup_cache_find
+ * find a previously registered cache by id
+ */
+static inline apcup_cache_t* apcup_cache_find(zend_uint id TSRMLS_DC) {
+    int current = 0, end = apcup->meta->nid;
+    {
+        while (current < end) {
+            if (apcup->list[current]->id == id) {
+                zend_error(E_WARNING, "returning %s for %d", apcup->list[current]->name, id);
+                return apcup->list[current];
+            }
+            current++;
+        }
+    }
+    return NULL;
 }
 
 /*
@@ -156,7 +164,9 @@ static inline zend_bool apcup_create_cache(char *name,
     
     int id = 0;
     
-    APC_LOCK(apcup);
+    HANDLE_BLOCK_INTERRUPTIONS();
+    
+    APC_LOCK(apcup->meta);
     
     /* ensure this cache is not created twice */
     id = apcup_cache_id(name, nlength TSRMLS_CC);
@@ -165,51 +175,65 @@ static inline zend_bool apcup_create_cache(char *name,
 	if (id == -1) {
 	    
 	    /* increment id */
-	    apcup->list[apcup->next] = apcups.malloc(sizeof(apcup_cache_t) TSRMLS_CC);
+	    apcup_cache_t* create = apcups.malloc(sizeof(apcup_cache_t) TSRMLS_CC);
 	    
-		if (apcup->list[apcup->next]) {
+		if (create) {
 			/* create cache */
-			apcup->list[apcup->next]->cache = apc_cache_create(
-			    &apcups, 
-			    NULL, /* TODO XXX no serializer support, we are only testing */ 
-			    entries_hint, 
-			    gc_ttl, ttl, 
-			    smart, 
-			    slam_defense TSRMLS_CC
-			);
-			
-			/* check we are not failures */
-			if (!apcup->list[apcup->next]->cache) {
-                goto failure;
+			{
+			    /* apc allocates using local malloc() */
+			    apc_cache_t* apc = apc_cache_create(
+			        &apcups,
+			        NULL, /* TODO XXX no serializer support, we are only testing */ 
+			        entries_hint,
+			        gc_ttl, ttl,
+			        smart,
+			        slam_defense TSRMLS_CC
+			    );
+			    
+			    if (apc) {
+			        /* copy to shm */
+			        create->cache = *apc;
+			        /* free original pointer */
+			        apc_efree(apc);
+			    } else goto failure;
 			}
 			
 			/* set name */
-			apcup->list[apcup->next]->name = apc_xmemcpy(
+			create->name = apc_xmemcpy(
 				name, nlength, apcups.malloc TSRMLS_CC);
-			apcup->list[apcup->next]->nlength = nlength;
+			create->nlength = nlength;
+			
+			/* set id */
+			create->id = (apcup->meta->nid)++;
 			
 			/* register constant id for cache as user */
 			zend_register_long_constant(
-			    apcup->list[apcup->next]->name, 
-			    apcup->list[apcup->next]->nlength+1, 
-			    apcup->next, 
+			    create->name, 
+			    create->nlength+1, 
+			    create->id, 
 			    CONST_CS, PHP_USER_CONSTANT TSRMLS_CC
 			);
 			
 			/* set result */
 			result = 1;
 			
-			/* move forward */
-			apcup->next++;
+			/* set position */
+			apcup->list[create->id - 1] = create;
 		}
 	} else {
 	    /* register constant id for cache as user */
-	    zend_register_long_constant(name, nlength+1, id, CONST_CS, PHP_USER_CONSTANT TSRMLS_CC);
+	    zend_register_long_constant(
+	        name, nlength+1, 
+	        id, 
+	        CONST_CS, PHP_USER_CONSTANT TSRMLS_CC
+	    );
 	    
 	    result = 1;
 	}
 	
-	APC_UNLOCK(apcup);
+	APC_UNLOCK(apcup->meta);
+	
+	HANDLE_UNBLOCK_INTERRUPTIONS();
 	
 	return result;
 
@@ -219,7 +243,9 @@ failure:
         "APCu failed to create the requested cache (%s), do you have enough resources ?",
         name
     );
-    APC_UNLOCK(apcup);
+    APC_UNLOCK(apcup->meta);
+    
+    HANDLE_UNBLOCK_INTERRUPTIONS();
     
     return 0;
 }
@@ -228,88 +254,93 @@ failure:
 * Startup APCu Pooling
 */
 static inline zend_bool apcup_startup(zend_uint mod TSRMLS_DC) {
-    /* make sure we do not initialize twice */
-	if (apcup) {
-	    apcup->refcount++;
-	    
-	    return 1;
-	}
-	
-	/* allocate apcup locally */
-    apcup = apc_emalloc(sizeof(apcup_t) TSRMLS_CC);
+    if (APG(shared)) {
+        if (!APG(initialized)) {
+            /* only once */
+            APG(initialized) = 1;
+                        
+            apcup = apc_emalloc(sizeof(apcup_t) TSRMLS_CC);
+            
+            if (apcup) {
+                /* initialize locking */
+                apc_lock_init(TSRMLS_C);
 
-    /* refcount */
-    apcup->refcount = 1;
-
-    /* set next id to nothing */
-	apcup->next = 0; 
-    
-    /* initialize locking */
-    apc_lock_init(TSRMLS_C);
-
-    /* initialize shared memory */
-    apcups.init(
-        1, 1024 * 1024 * APG(shared), NULL TSRMLS_CC);
-    
-    /* create a lock for safety */
-    CREATE_LOCK(&apcup->lock);
-
-	/* allocate list structure */
-    apcup->list = apcups.malloc(sizeof(apcup_cache_t**) TSRMLS_CC);
-    
-    /* indicate we failed */
-    if (!apcup->list)
-        return 0;
-
-	return 1;
+                /* initialize sma */
+                apcups.init(
+                    1, 1024 * 1024 * APG(shared), NULL TSRMLS_CC);
+                
+                /* set size */
+                apcup->size = (sizeof(apcup_cache_t*) * (APG(shared)/4)) + sizeof(apcup_meta_t);
+                
+                /* allocate shm */
+                apcup->shm = apcups.malloc(apcup->size TSRMLS_CC);
+                
+                /* zero shm, makes for easier debug */
+                memset(apcup->shm, 0, apcup->size);
+                
+                if (apcup->shm) {
+                    /* set meta at start of shm */
+                    apcup->meta = (apcup_meta_t*) apcup->shm;
+                    
+                    if (apcup->meta) {
+                        /* create a lock for safety */
+                        CREATE_LOCK(&apcup->meta->lock);
+                        
+                        /* set next id for cache */
+                        apcup->meta->nid = 1;
+                        
+                        /* maximum number of caches */
+                        apcup->meta->max = (APG(shared)/4);
+                        
+	                    /* point list at end of meta */
+	                    apcup->list = (apcup_cache_t**) (((char*) apcup->shm) + sizeof(apcup_meta_t));
+	                    
+	                    return 1;
+                    } else return 0;
+                } else return 0;
+            } else return 0;
+        } else return 1;
+    } else return 1;
 }
 
 /*
 * apcup_shutdown
 */
 static inline void apcup_shutdown(TSRMLS_D) {
-    /* apcup shutdown */
-	APC_LOCK(apcup);
-    {
-        if (--apcup->refcount == 0) {
-            int current = 0, end = apcup->next;
-            
-            while (current < end) {
-                apc_cache_destroy(apcup->list[current]->cache TSRMLS_CC);
-                if (apcup->list[current]->name) {
-                     apcups.free(apcup->list[current]->name TSRMLS_CC);
+    if (apcup && apcup->meta) {
+        /* apcup shutdown */
+	    APC_LOCK(apcup->meta);
+        {
+            if (APG(initialized)) {
+                /* destroy caches */
+                {
+                    int current = 0, end = apcup->meta->nid;
+                    
+                    while (current < end) {
+                        if (apcup->list[current]) {
+                            DESTROY_LOCK(&apcup->list[current]->cache.header->lock);
+                        } else break;
+                        
+                        current++;
+                    }
                 }
-                current++;
+                /* only once */
+                APG(initialized) = 0;
             }
-            
-            /* free list */
-            apcups.free(apcup->list TSRMLS_CC);
-            
-            /* null items */
-            apcup->list = NULL;
-        } else goto nothing;
+        }
+        APC_UNLOCK(apcup->meta);
+        return;
     }
-    APC_UNLOCK(apcup);
-
-    /* destroy this */
-    DESTROY_LOCK(&apcup->lock);
-    
-    /* cleanup sma */
-    apcups.cleanup(TSRMLS_C);
-    
-    return;
-    
-nothing:
-    APC_UNLOCK(apcup);
-    
-    return;
 }
 
 /* {{{ php_apcup_init_globals
  */
 static void php_apcup_init_globals(zend_apcup_globals *apcup_globals)
 {
-	apcup_globals->shared = 32;
+	apcup_globals->shared = 16;
+	apcup_globals->mask = NULL;
+	
+	apcup_globals->initialized = 0;
 }
 /* }}} */
 
@@ -320,7 +351,7 @@ PHP_MINIT_FUNCTION(apcup)
 	REGISTER_INI_ENTRIES();
     
     if (!apcup_startup(module_number TSRMLS_CC))
-		zend_error(E_ERROR, "APCu pooling failed to startup, try raising apcup->shared");
+		zend_error(E_ERROR, "APCu pooling failed to startup, try raising apcup.shared");
 
 	return SUCCESS;
 }
@@ -355,19 +386,21 @@ PHP_MINFO_FUNCTION(apcup)
    Should the cache already exist, no action is performed */
 PHP_FUNCTION(apcup_create) 
 {
-    char *name = NULL;
-    zend_uint nlength = 0L;
-    zend_ulong entries_hint = 1024;
-    zend_ulong gc_ttl = 0L;
-    zend_ulong ttl = 0L;
-    zend_ulong smart = 0L;
-    zend_bool slam_defense = 1;
-    
-    if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "s|llllb", &name, &nlength, &entries_hint, &gc_ttl, &ttl, &smart, &slam_defense) != SUCCESS) {
-        return;
+    if (APG(shared) && APG(initialized)) {
+        char *name = NULL;
+        zend_uint nlength = 0L;
+        zend_ulong entries_hint = 1024;
+        zend_ulong gc_ttl = 0L;
+        zend_ulong ttl = 0L;
+        zend_ulong smart = 0L;
+        zend_bool slam_defense = 1;
+        
+        if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "s|llllb", &name, &nlength, &entries_hint, &gc_ttl, &ttl, &smart, &slam_defense) != SUCCESS) {
+            return;
+        }
+        
+        RETURN_BOOL(apcup_create_cache(name, nlength, entries_hint, gc_ttl, ttl, smart, slam_defense TSRMLS_CC));
     }
-    
-    RETURN_BOOL(apcup_create_cache(name, nlength, entries_hint, gc_ttl, ttl, smart, slam_defense TSRMLS_CC));
 } /* }}} */
 
 /* {{{ proto boolean apcup_set(long cache, string name, mixed value, [, long ttl])
@@ -375,56 +408,89 @@ PHP_FUNCTION(apcup_create)
    Returns true on success */
 PHP_FUNCTION(apcup_set)
 {
-    zend_ulong cache = 0L;
-    char *key = NULL;
-    zend_uint klen = 0L;
-    zend_uint ttl = 0L;
-    zval *pzval = NULL;
-    
-    if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "lsz|l", &cache, &key, &klen, &pzval, &ttl) != SUCCESS) {
-        return;
+    if (APG(shared) && APG(initialized)) {
+        APC_RLOCK(apcup->meta);
+        {
+            
+            zend_ulong cache = 0L;
+            char *key = NULL;
+            zend_uint klen = 0L;
+            zend_uint ttl = 0L;
+            zval *pzval = NULL;
+            
+            if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "lsz|l", &cache, &key, &klen, &pzval, &ttl) != SUCCESS) {
+                goto unlock;
+            }
+            
+            if (AP_IS_CACHE(cache)) {
+                apcup_cache_t* pooled = apcup_cache_find(cache TSRMLS_CC);
+                if (pooled) {
+                    ZVAL_BOOL(return_value, apc_cache_store(&pooled->cache, key, klen+1, pzval, ttl, 1 TSRMLS_CC));  
+                }
+            } else zend_error(E_WARNING, "APCu could not find the requested cache (%d)", cache);
+        }
+unlock:
+        APC_RUNLOCK(apcup->meta);
     }
-    
-    if (AP_IS_CACHE(cache)) {
-        ZVAL_BOOL(return_value, apc_cache_store(AP_CACHE(cache), key, klen+1, pzval, ttl, 1 TSRMLS_CC));  
-    } else zend_error(E_WARNING, "APCu could not find the requested cache (%d)", cache);
 } /* }}} */
 
 /* {{{ proto mixed apcup_get(long cache, string name) 
   Get a value from a specific cache */
 PHP_FUNCTION(apcup_get)
 {
-    zend_ulong cache;
-    char *key;
-    zend_uint klen;
-    
-    if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "ls", &cache, &key, &klen) != SUCCESS) {
-        return;
+    if (APG(shared) && APG(initialized)) {
+        APC_RLOCK(apcup->meta);
+        {
+            zend_ulong cache;
+            char *key;
+            zend_uint klen;
+            
+            if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "ls", &cache, &key, &klen) != SUCCESS) {
+                goto unlock;
+            }
+            
+            if (AP_IS_CACHE(cache)) {
+               apcup_cache_t* pooled = apcup_cache_find(cache TSRMLS_CC);
+               
+               if (pooled) {
+                  if (!apc_cache_fetch(&pooled->cache, key, klen+1, time(0), &return_value TSRMLS_CC)) {
+                    /* not found */
+                  }
+               }
+            } else zend_error(E_WARNING, "APCu could not find the requested cache (%d)", cache);
+        }
+unlock:
+        APC_RUNLOCK(apcup->meta);
     }
-    
-    if (AP_IS_CACHE(cache)) {
-       if (!apc_cache_fetch(AP_CACHE(cache), key, klen+1, time(0), &return_value TSRMLS_CC)) {
-            /* not found */
-        } 
-    } else zend_error(E_WARNING, "APCu could not find the requested cache (%d)", cache);
 } /* }}} */
 
 /* {{{ proto mixed apcup_info(long cache) 
   Get info about cache */
 PHP_FUNCTION(apcup_info)
 {
-    zend_ulong cache;
+    if (APG(shared) && APG(initialized)) {
+        APC_RLOCK(apcup->meta);
+        {
+            zend_ulong cache;
     
-    if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "l", &cache) != SUCCESS) {
-        return;
-    }
-    
-    if (AP_IS_CACHE(cache)) {
-       zval* info = apc_cache_info(AP_CACHE(cache), 0 TSRMLS_CC);
-       
-       if (info) {
-           ZVAL_ZVAL(return_value, info, 1, 1);
-       } else RETURN_NULL();
+            if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "l", &cache) != SUCCESS) {
+                goto unlock;
+            }
+            
+            if (AP_IS_CACHE(cache)) {
+               apcup_cache_t* pooled = apcup_cache_find(cache TSRMLS_CC);
+               
+               if (pooled) {
+                   zval* info = apc_cache_info(&pooled->cache, 0 TSRMLS_CC);
+                   
+                   if (info) {
+                       ZVAL_ZVAL(return_value, info, 1, 1);
+                   } else ZVAL_NULL(return_value);
+               } else ZVAL_NULL(return_value);
+            } else zend_error(E_WARNING, "APCu could not find the requested cache (%d)", cache);
+        }
+unlock:
+        APC_RUNLOCK(apcup->meta);
     }
 } /* }}} */
 
@@ -432,14 +498,25 @@ PHP_FUNCTION(apcup_info)
    Clear a specific cache */
 PHP_FUNCTION(apcup_clear)
 {
-    zend_ulong cache;
+    if (APG(shared) && APG(initialized)) {
+        APC_RLOCK(apcup->meta);
+        {
+            zend_ulong cache;
     
-    if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "l", &cache) != SUCCESS) {
-        return;
-    }
-    
-    if (AP_IS_CACHE(cache)) {
-        apc_cache_clear(AP_CACHE(cache) TSRMLS_CC);
+            if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "l", &cache) != SUCCESS) {
+                goto unlock;
+            }
+            
+            if (AP_IS_CACHE(cache)) {
+                apcup_cache_t* pooled = apcup_cache_find(cache TSRMLS_CC);
+                
+                if (pooled) {
+                    apc_cache_clear(&pooled->cache TSRMLS_CC);
+                }
+            }
+        }
+unlock:
+        APC_RUNLOCK(apcup->meta);
     }
 } /* }}} */
 
