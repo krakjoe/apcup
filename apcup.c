@@ -336,7 +336,7 @@ static inline void apcup_shutdown(TSRMLS_D) {
                             DESTROY_LOCK(&apcup->list[current]->cache.header->lock);
                             
                             if (apcup->list[current]->name) {
-                                apcups.free(apcup->list[current]->name);
+                                apcups.free(apcup->list[current]->name TSRMLS_CC);
                             }
                         } else break;
                         
@@ -348,13 +348,16 @@ static inline void apcup_shutdown(TSRMLS_D) {
             APC_UNLOCK(apcup->meta);
             
             /* free meta */
-            apcups.free(apcup->meta);
+            apcups.free(apcup->meta TSRMLS_CC);
+            
+            /* free shm */
+            apcups.free(apcup->shm TSRMLS_CC);
             
             /* cleanup sma */
             apcups.cleanup(TSRMLS_C);
             
             /* and last one ... */
-            apc_efree(apcup);
+            apc_efree(apcup TSRMLS_CC);
             
             /* be sure */
             apcup = NULL;
