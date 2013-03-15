@@ -321,10 +321,12 @@ static inline zend_bool apcup_startup(zend_uint mod TSRMLS_DC) {
 */
 static inline void apcup_shutdown(TSRMLS_D) {
     if (apcup && apcup->meta) {
-        /* apcup shutdown */
-	    APC_LOCK(apcup->meta);
-        {
-            if (APG(initialized)) {
+        if (APG(initialized)) {
+            APG(initialized) = 0;
+            
+            /* apcup shutdown */
+	        APC_LOCK(apcup->meta);
+            {
                 /* destroy caches */
                 {
                     int current = 0, end = apcup->meta->nid;
@@ -332,17 +334,31 @@ static inline void apcup_shutdown(TSRMLS_D) {
                     while (current < end) {
                         if (apcup->list[current]) {
                             DESTROY_LOCK(&apcup->list[current]->cache.header->lock);
+                            
+                            if (apcup->list[current]->name) {
+                                apcups.free(apcup->list[current]->name);
+                            }
                         } else break;
                         
                         current++;
                     }
                 }
-                /* only once */
-                APG(initialized) = 0;
             }
+            /* we are out */
+            APC_UNLOCK(apcup->meta);
+            
+            /* free meta */
+            apcups.free(apcup->meta);
+            
+            /* cleanup sma */
+            apcups.cleanup(TSRMLS_C);
+            
+            /* and last one ... */
+            apc_efree(apcup);
+            
+            /* be sure */
+            apcup = NULL;
         }
-        APC_UNLOCK(apcup->meta);
-        return;
     }
 }
 
