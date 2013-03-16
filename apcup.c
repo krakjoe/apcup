@@ -228,7 +228,7 @@ static inline zend_bool apcup_create_cache(char *name,
 	    if (id == -1) {
 	        
 	        /* allocate new pooled cache object in shm */
-	        apcup_cache_t* create = apcups.malloc(sizeof(apcup_cache_t) TSRMLS_CC);
+	        apcup_cache_t* create = apcups.smalloc(sizeof(apcup_cache_t) TSRMLS_CC);
 	        
 		    if (create) {
 			    /* create cache */
@@ -253,7 +253,7 @@ static inline zend_bool apcup_create_cache(char *name,
 			
 			    /* set name */
 			    create->name = apc_xmemcpy(
-				    name, nlength, apcups.malloc TSRMLS_CC);
+				    name, nlength, apcups.smalloc TSRMLS_CC);
 			    create->nlength = nlength;
 			
 			    /* set id */
@@ -364,7 +364,7 @@ PHP_MINIT_FUNCTION(apcup)
                     size_t required = (sizeof(apcup_cache_t*) * APG(caches)) + sizeof(apcup_meta_t);
                     
                     /* allocate shm */
-                    apcup->shm = apcups.malloc(required TSRMLS_CC);
+                    apcup->shm = apcups.smalloc(required TSRMLS_CC);
                     
                     if (apcup->shm) {
                         /* zero shm, makes for easier debug */
