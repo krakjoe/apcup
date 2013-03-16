@@ -58,10 +58,8 @@ struct apcup_cache_t {
 typedef struct apcup_meta_t {
     /* lock for object */
     apc_lock_t       lock;
-    /* maximum number of caches */
-    int              max;
-    /* id of next cache */
-    int              nid;
+    /* end of cache list */
+    int              end;
 } apcup_meta_t; /* }}} */
 
 /* {{{ struct definition: apcup_t */
@@ -112,6 +110,11 @@ ZEND_BEGIN_MODULE_GLOBALS(apcup)
 	* Default: (8)
 	*/
 	long         caches;
+	/*
+	* enable/disable apcup in cli
+	* Default: (true)
+	*/
+	zend_bool    cli;
 	
 	/*
 	* The remainder of globals are used internally
