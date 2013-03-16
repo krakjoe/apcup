@@ -340,7 +340,6 @@ PHP_MINIT_FUNCTION(apcup)
             if (!APG(cli)) {
             
                 if (strcmp(sapi_module.name, "cli") == SUCCESS) {
-                     zend_error(E_WARNING, "naaa");
                     /* stop any other 
                         contexts checking again */
                     APG(shared) = 0;
@@ -395,13 +394,8 @@ PHP_MINIT_FUNCTION(apcup)
                 
                 zend_error(E_WARNING, "APCu Pooling failed to startup, try raising apcup.shared");
                 
-            } else return SUCCESS;
-        } else {
-            return SUCCESS;
+            }
         }
-    } else {
-        zend_error(E_WARNING, "APCu Pooling not available ...");
-        return SUCCESS;
     }
 
 	return SUCCESS;
