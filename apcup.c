@@ -231,8 +231,6 @@ static inline zend_bool apcup_create_cache(char *name,
 		    if (create) {
 			    /* create cache */
 			    {
-			        //apc_sma_t* sma, apc_serializer_t* serializer, int size_hint, int gc_ttl, int ttl, long smart, zend_bool defend TSRMLS_DC
-			        
 			        /* apc allocates using local malloc() */
 			        apc_cache_t* apc = apc_cache_create(
 			            &apcups,
