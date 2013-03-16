@@ -333,14 +333,14 @@ PHP_MINIT_FUNCTION(apcup)
 	REGISTER_INI_ENTRIES();
     
     if (APG(shared)) {
-        if (!APG(initialized)) {
-            /* only once */
-            APG(initialized) = 1;
-            
+        /* safer */
+        if (!apcups.initialized) {
+        
             /* sapi check */
             if (!APG(cli)) {
             
                 if (strcmp(sapi_module.name, "cli") == SUCCESS) {
+                     zend_error(E_WARNING, "naaa");
                     /* stop any other 
                         contexts checking again */
                     APG(shared) = 0;
@@ -350,8 +350,8 @@ PHP_MINIT_FUNCTION(apcup)
             }
             
             /* main object initialization */
-            if ((apcup = apc_emalloc(sizeof(apcup_t) TSRMLS_CC))) {
-            
+            if (!apcups.initialized) {
+
                 /* initialize locking */
                 apc_lock_init(TSRMLS_C);
 
@@ -360,30 +360,35 @@ PHP_MINIT_FUNCTION(apcup)
                     APG(segments), 1024 * 1024 * APG(shared), APG(mask) TSRMLS_CC);
                 
                 {
-                    /* calculate required size */
-                    size_t required = (sizeof(apcup_cache_t*) * APG(caches)) + sizeof(apcup_meta_t);
+                    /* initialized in shared memory */
+                    apcup = (apcup_t*) apcups.smalloc(sizeof(apcup_t) TSRMLS_CC);
                     
-                    /* allocate shm */
-                    apcup->shm = apcups.smalloc(required TSRMLS_CC);
-                    
-                    if (apcup->shm) {
-                        /* zero shm, makes for easier debug */
-                        memset(apcup->shm, 0, required);
+                    if (apcup) {
+                        /* calculate required size */
+                        size_t required = (sizeof(apcup_cache_t*) * APG(caches)) + sizeof(apcup_meta_t);
                         
-                        /* set meta at start of shm */
-                        apcup->meta = (apcup_meta_t*) apcup->shm;
+                        /* allocate shm */
+                        apcup->shm = apcups.smalloc(required TSRMLS_CC);
                         
-                        if (apcup->meta) {
-                            /* create a lock for safety */
-                            CREATE_LOCK(&apcup->meta->lock);
+                        if (apcup->shm) {
+                            /* zero shm, makes for easier debug */
+                            memset(apcup->shm, 0, required);
                             
-                            /* set next id for cache */
-                            apcup->meta->end = 1;
+                            /* set meta at start of shm */
+                            apcup->meta = (apcup_meta_t*) apcup->shm;
                             
-	                        /* point list at end of meta */
-                            apcup->list = (apcup_cache_t**) (((char*) apcup->shm) + sizeof(apcup_meta_t));
-                        
-                            return SUCCESS;
+                            if (apcup->meta) {
+                                /* create a lock for safety */
+                                CREATE_LOCK(&apcup->meta->lock);
+                                
+                                /* set next id for cache */
+                                apcup->meta->end = 1;
+                                
+	                            /* point list at end of meta */
+                                apcup->list = (apcup_cache_t**) (((char*) apcup->shm) + sizeof(apcup_meta_t));
+                            
+                                return SUCCESS;
+                            }
                         }
                     }
                 }
@@ -391,8 +396,13 @@ PHP_MINIT_FUNCTION(apcup)
                 zend_error(E_WARNING, "APCu Pooling failed to startup, try raising apcup.shared");
                 
             } else return SUCCESS;
-        } else return SUCCESS;
-    } else return SUCCESS;
+        } else {
+            return SUCCESS;
+        }
+    } else {
+        zend_error(E_WARNING, "APCu Pooling not available ...");
+        return SUCCESS;
+    }
 
 	return SUCCESS;
 }
@@ -405,10 +415,7 @@ PHP_MSHUTDOWN_FUNCTION(apcup)
 	UNREGISTER_INI_ENTRIES();
 	
     if (apcup && apcup->meta) {
-        if (APG(initialized)) {
-            /* stop horror ! */
-            APG(initialized) = 0;
-            
+        if (apcups.initialized) {
             /* apcup shutdown */
             APC_LOCK(apcup->meta);
             {
@@ -440,11 +447,11 @@ PHP_MSHUTDOWN_FUNCTION(apcup)
             /* free shm */
             apcups.free(apcup->shm TSRMLS_CC);
             
+            /* free apcup */
+            apcups.free(apcup TSRMLS_CC);
+            
             /* cleanup sma */
             apcups.cleanup(TSRMLS_C);
-            
-            /* and last one ... */
-            apc_efree(apcup TSRMLS_CC);
             
             /* be sure */
             apcup = NULL;
@@ -472,7 +479,7 @@ PHP_MINFO_FUNCTION(apcup)
    Should the cache already exist, no action is performed */
 PHP_FUNCTION(apcup_create) 
 {
-    if (APG(shared) && APG(initialized)) {
+    if (apcups.initialized) {
         char *name = NULL;
         zend_uint nlength = 0L;
         zend_ulong entries_hint = 1024;
@@ -494,7 +501,7 @@ PHP_FUNCTION(apcup_create)
    Returns true on success */
 PHP_FUNCTION(apcup_set)
 {
-    if (APG(shared) && APG(initialized)) {
+    if (apcups.initialized) {
         zend_ulong cache = 0L;
         char *key = NULL;
         zend_uint klen = 0L;
@@ -518,7 +525,7 @@ PHP_FUNCTION(apcup_set)
   Get a value from a specific cache */
 PHP_FUNCTION(apcup_get)
 {
-    if (APG(shared) && APG(initialized)) {
+    if (apcups.initialized) {
         zend_ulong cache;
         char *key;
         zend_uint klen;
@@ -544,7 +551,7 @@ PHP_FUNCTION(apcup_get)
   Get info about cache */
 PHP_FUNCTION(apcup_info)
 {
-    if (APG(shared) && APG(initialized)) {
+    if (apcups.initialized) {
         zend_ulong cache;
     
         if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "l", &cache) != SUCCESS) {
@@ -578,7 +585,7 @@ PHP_FUNCTION(apcup_info)
    Clear a specific cache */
 PHP_FUNCTION(apcup_clear)
 {
-    if (APG(shared) && APG(initialized)) {
+    if (apcups.initialized) {
         zend_ulong cache;
     
         if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "l", &cache) != SUCCESS) {
