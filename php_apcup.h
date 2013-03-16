@@ -70,8 +70,6 @@ typedef struct apcup_t {
     apcup_meta_t*    meta;
 	/* shared caches */
     apcup_cache_t**  list;
-    /* size of apcup */
-    int size;
 } apcup_t; /* }}} */
 
 /* {{{ apcup shared memory */

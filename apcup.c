@@ -177,9 +177,16 @@ static inline int apcup_cache_id(char* name, zend_uint nlength TSRMLS_DC) {
  */
 static inline apcup_cache_t* apcup_cache_find(zend_uint id TSRMLS_DC) {
     if (apcup && apcup->meta) {
-        if (id > 0 && id < apcup->meta->end) {
-            return apcup->list[id - 1];
+        apcup_cache_t* found = NULL;
+        {
+            APC_RLOCK(apcup->meta);
+            if (id > 0 && 
+                id < apcup->meta->end) {
+                found = apcup->list[id - 1];
+            }
+            APC_RUNLOCK(apcup->meta);
         }
+        return found;
     }
     return NULL;
 }
@@ -498,14 +505,12 @@ PHP_FUNCTION(apcup_set)
             return;
         }
         
-        APC_RLOCK(apcup->meta);
         {
             apcup_cache_t* pooled = apcup_cache_find(cache TSRMLS_CC);
             if (pooled) {
                 ZVAL_BOOL(return_value, apc_cache_store(&pooled->cache, key, klen+1, pzval, ttl, 1 TSRMLS_CC));  
             } else zend_error(E_WARNING, "APCu could not find the requested cache (%d)", cache);
         }
-        APC_RUNLOCK(apcup->meta);
     }
 } /* }}} */
 
@@ -522,7 +527,7 @@ PHP_FUNCTION(apcup_get)
             return;
         }
         
-        APC_RLOCK(apcup->meta);
+        
         {
             apcup_cache_t* pooled = apcup_cache_find(cache TSRMLS_CC);
                
@@ -532,7 +537,6 @@ PHP_FUNCTION(apcup_get)
                 }
             } else zend_error(E_WARNING, "APCu could not find the requested cache (%d)", cache);
         }
-        APC_RUNLOCK(apcup->meta);
     }
 } /* }}} */
 
@@ -547,7 +551,6 @@ PHP_FUNCTION(apcup_info)
             return;
         }
         
-        APC_RLOCK(apcup->meta);
         {
             switch (cache) {
                 case 0: {
@@ -566,10 +569,8 @@ PHP_FUNCTION(apcup_info)
                        } else ZVAL_NULL(return_value);
                     } else zend_error(E_WARNING, "APCu could not find the requested cache (%d)", cache);
                 }
-            }
-            
+            }   
         }
-        APC_RUNLOCK(apcup->meta);
     }
 } /* }}} */
 
@@ -584,7 +585,7 @@ PHP_FUNCTION(apcup_clear)
             return;
         }
         
-        APC_RLOCK(apcup->meta);
+        
         {
             apcup_cache_t* pooled = apcup_cache_find(cache TSRMLS_CC);
                 
@@ -592,7 +593,6 @@ PHP_FUNCTION(apcup_clear)
                 apc_cache_clear(&pooled->cache TSRMLS_CC);
             } else zend_error(E_WARNING, "APCu could not find the requested cache (%d)", cache);
         }
-        APC_RUNLOCK(apcup->meta);
     }
 } /* }}} */
 
