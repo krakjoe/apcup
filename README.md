@@ -11,7 +11,6 @@ API
 ===
 
 ```php
-<?php
 /**
 * Will create or register a cache in the current context
 * 
@@ -56,7 +55,6 @@ apcup_clear($cache);
 * @param $cache          a constant cache id
 **/
 apcup_info($cache);
-?>
 ```
 
 INI
@@ -96,5 +94,31 @@ Stand on the shoulders of giants, whenever you can ...
 APCu has good memory management and garbage collection, at sometime in the future, APCu backed storage in pthreads will at least be an option.
 In the interim, this extension can be used to great effect in order to manage ( in a far superior way ) the shared memory among threads.
 
-APCu must be loaded, but should you use pools, you should use apc.enable = 0 in your configuration settings, this will stop APCu from setting
-up the default user cache and allow you to pool for threads.
+APCu must be loaded, but should be disabled, this will stop APCu from setting up the default user cache and allow you to pool for threads.
+
+Follows an example of using APCu Pooling in pthreads:
+
+```php
+/* create the cache */
+apcup_create("APCUP_TEST");
+
+class T extends Thread {
+    public function run (){
+        /* no need to create, though you can ... */
+        var_dump(
+            apcup_get(APCUP_TEST, "global"));
+    }
+}
+
+/* some data from somewhere */
+$my = array(
+    "Hello", "World"
+);
+
+/* set the value in the cache for the thread to come ... */
+apcup_set(APCUP_TEST, "global", $my);
+
+/* go */
+$t = new T();
+$t->start();
+```
