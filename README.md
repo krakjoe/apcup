@@ -7,12 +7,8 @@ This extension requires apcu, load apcu.so first, then apcup.so
 
 Should you decide to use pools in production, it is a good idea to disable the main APCu cache with apc.enabled = 0 in INI.
 
-Quick How To
-============
-
-You provide names for your caches, which are then registered as constants using the given name.
-
-Here is a description of the API:
+API
+===
 
 ```php
 <?php
