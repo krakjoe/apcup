@@ -74,3 +74,14 @@ APCuP should ideally define a way to create allocators in userland, thus allowin
 Using a single allocator separate from APCu is a good test of the water.
 
 Note: this (should) work(s) with APCu disabled in INI, but APCu must be loaded at runtime.
+
+pthreads
+========
+
+Stand on the shoulders of giants, whenever you can ...
+
+APCu has good memory management and garbage collection, at sometime in the future, APCu backed storage in pthreads will at least be an option.
+In the interim, this extension can be used to great effect in order to manage ( in a far superior way ) the shared memory among threads.
+
+APCu must be loaded, but should you use pools, you should use apc.enable = 0 in your configuration settings, this will stop APCu from setting
+up the default user cache and allow you to pool for threads.
