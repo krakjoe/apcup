@@ -12,55 +12,75 @@ Quick How To
 
 You provide names for your caches, which are then registered as constants using the given name.
 
-Here is the prototype for apcup_create():
-    long apcup_create(string name [, long entries_hint = 1024, [ long gc_ttl = 0, [ long ttl = 0, [ long smart = 0, [ bool slam_defense = true]]]]])
-    
-Example:
-    apcup_create("APCUP_DEFAULT", 2048, 3060);
-    
-    boolean apcup_set(long cache, string name, mixed value, [, long ttl])
-    Example:
-        ```php
-        apcup_set(APCUP_DEFAULT, "key", $value);
-        ```
+Here is a description of the API:
 
-    mixed apcup_get(long cache, string name)
-    Example:
-        ```php
-        apcup_get(APCUP_DEFAULT, "key");
-        ```
+```php
+<?php
+/**
+* Will create or register a cache in the current context
+* 
+* @param $name           the constant name of this cache
+* @param $entries_hint   the number of entries expected
+* @param $gc_ttl         the ttl for items on gc list
+* @param $ttl            the ttl for items in cache
+* @param $smart          the smart setting for gc time
+* @param $slam_defense   enable/disable slam defense
+**/
+apcup_create($name, $entries_hint = 1024, $gc_ttl = 0, $ttl = 0, $smart = 0, $slam_defense = true);
 
-    mixed apcup_clear(long cache)
-    Example:
-        ```php
-        apcup_clear(APCUP_DEFAULT);
-        ```
+/**
+* Will set a value in a specific cache
+* 
+* @param $cache          a constant cache id
+* @param $key            the name of the entry
+* @param $value          the data for the entry
+* @param $ttl            the ttl for the entry
+**/
+apcup_set($cache, $key, $value, $ttl = 0);
 
-    mixed apcup_info(long cache)
-    Example:
-        ```php
-        apcup_info(APCUP_DEFAULT);
-        ```
+
+/**
+* Will get a value from a specific cache
+* 
+* @param $cache          a constant cache id
+* @param $key            the name of the entry
+**/
+apcup_get($cache, $key);
+
+/**
+* Will clear a specific cache
+* 
+* @param $cache          a constant cache id
+**/
+apcup_clear($cache);
+
+/**
+* Will return detailed information concerning a cache
+* 
+* @param $cache          a constant cache id
+**/
+apcup_info($cache);
+?>
+```
 
 INI
 ===
 
-apcup.shared: 
-    size of each segment (MB)
-    Default: (32)
+ * apcup.shared:
+    _size of each segment (MB)_
+    *Default*: (32)
     
-apcup.segments: 
-    number of segments to use
-    Default: (1)
+ * apcup.segments: 
+    _number of segments to use_
+    *Default*: (1)
     
-apcup.mask:
-    mmap file mask
-    Default: (null)
+ * apcup.mask:
+    _mmap file mask_
+    *Default*: (null)
     
-apcup.caches: 
-    the maximum number of caches that can be created
-    Default: (8)
-
+ * apcup.caches: 
+    _the maximum number of caches that can be created_
+    *Default*: (8)
 
 How
 ===
