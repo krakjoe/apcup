@@ -1,10 +1,11 @@
 APCu Pooling
 ============
 
-This is an extperimental extension allowing users to pool caches in userland, providing different settings for each
-cache individually.
+This extension allows users to pool caches in userland, providing different settings for each cache individually.
 
 This extension requires apcu, load apcu.so first, then apcup.so
+
+Should you decide to use pools in production, it is a good idea to disable the main APCu cache with apc.enabled = 0 in INI.
 
 Quick How To
 ============
@@ -64,16 +65,12 @@ apcup.caches:
 How
 ===
 
-APCuP uses a single shared allocator, *for now*, separate from the main APCu allocator. 
-It exposes enough of the APCu API for you to create and manipulate multiple caches with varying settings at runtime.
+APCuP uses a single shared allocator provided by the APCu API. It allows the user to create caches and manipulate them in any context at runtime.
 
 Future
 ======
 
-APCuP should ideally define a way to create allocators in userland, thus allowing the user to specify an allocator for a cache.
-Using a single allocator separate from APCu is a good test of the water.
-
-Note: this (should) work(s) with APCu disabled in INI, but APCu must be loaded at runtime.
+Hopefully, one day APCu(P) will have the ability to create multiple allocators to reduce lock contention on any pooled caches.
 
 pthreads
 ========
