@@ -106,12 +106,20 @@ const zend_function_entry apcup_functions[] = {
 	PHP_FE_END
 }; /* }}} */
 
+/* {{{ apcup_deps [] */
+const zend_module_dep apcup_deps[] = {
+    ZEND_MOD_REQUIRED("apcu")
+    ZEND_MOD_END
+}; /* }}} */
+
 /* {{{ apcup_module_entry
  */
 zend_module_entry apcup_module_entry = {
 #if ZEND_MODULE_API_NO >= 20010901
-	STANDARD_MODULE_HEADER,
+	STANDARD_MODULE_HEADER_EX,
 #endif
+    NULL,
+    apcup_deps,
 	"apcup",
 	apcup_functions,
 	PHP_MINIT(apcup),
