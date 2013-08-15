@@ -1,13 +1,14 @@
 // $Id$
 // vim:ft=javascript
 
-// If your extension references something external, use ARG_WITH
-// ARG_WITH("apcup", "for apcup support", "no");
-
-// Otherwise, use ARG_ENABLE
-// ARG_ENABLE("apcup", "enable apcup support", "no");
+ARG_ENABLE("apcup", "enable apcup support", "no");
 
 if (PHP_APCUP != "no") {
-	EXTENSION("apcup", "apcup.c");
+	if (PHP_APCU == "yes" && ADD_EXTENSION_DEP('apcup', 'apcu')) {
+		EXTENSION("apcup", "apcup.c");
+	} else {
+		WARNING("apcup support can't be enabled, apcu is not enabled")
+		PHP_APCUP = "no"
+	}
 }
 
