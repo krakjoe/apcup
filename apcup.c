@@ -431,7 +431,7 @@ PHP_MSHUTDOWN_FUNCTION(apcup)
                                 DESTROY_LOCK(&apcup->list[current]->cache.header->lock);
                                 
                                 if (apcup->list[current]->name) {
-                                    apcups.free(apcup->list[current]->name TSRMLS_CC);
+                                    apcups.sfree(apcup->list[current]->name TSRMLS_CC);
                                 }
                             } else break;
                             
@@ -444,13 +444,13 @@ PHP_MSHUTDOWN_FUNCTION(apcup)
             APC_UNLOCK(apcup->meta);
             
             /* free meta */
-            apcups.free(apcup->meta TSRMLS_CC);
+            apcups.sfree(apcup->meta TSRMLS_CC);
             
             /* free shm */
-            apcups.free(apcup->shm TSRMLS_CC);
+            apcups.sfree(apcup->shm TSRMLS_CC);
             
             /* free apcup */
-            apcups.free(apcup TSRMLS_CC);
+            apcups.sfree(apcup TSRMLS_CC);
             
             /* cleanup sma */
             apcups.cleanup(TSRMLS_C);
