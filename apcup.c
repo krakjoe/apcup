@@ -270,7 +270,7 @@ static inline zend_bool apcup_create_cache(char *name,
 			    /* register constant id for cache as user */
 			    zend_register_long_constant(
 			        create->name, 
-			        create->nlength+1, 
+			        create->nlength, 
 			        create->id, 
 			        CONST_CS, PHP_USER_CONSTANT TSRMLS_CC
 			    );
@@ -571,7 +571,7 @@ PHP_FUNCTION(apcup_info)
                        zval info = apc_cache_info(&pooled->cache, 0 TSRMLS_CC);
 
                        if (Z_TYPE(info) != IS_UNDEF) {
-                           ZVAL_COPY(return_value, &info);
+                           ZVAL_ZVAL(return_value, &info, 1, 1);
                        } else ZVAL_NULL(return_value);
                     } else zend_error(E_WARNING, "APCu could not find the requested cache (%d)", cache);
                 }
