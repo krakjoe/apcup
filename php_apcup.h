@@ -96,12 +96,12 @@ ZEND_BEGIN_MODULE_GLOBALS(apcup)
 	* the size of a shared segment
 	* Default: (32MB)
 	*/
-	long         shared;
+	zend_long    shared;
 	/*
 	* the number of segments to use
 	* Default: (1)
 	*/
-	long         segments;
+	zend_long    segments;
 	/*
 	* mask for mmap
 	* Default: (null)
@@ -111,7 +111,7 @@ ZEND_BEGIN_MODULE_GLOBALS(apcup)
 	* maximum number of caches expected
 	* Default: (8)
 	*/
-	long         caches;
+	zend_long    caches;
 	/*
 	* enable/disable apcup in cli
 	* Default: (true)
