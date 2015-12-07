@@ -28,6 +28,9 @@
 extern zend_module_entry apcup_module_entry;
 #define phpext_apcup_ptr &apcup_module_entry
 
+#define PHP_APCUP_EXTNAME "apcup"
+#define PHP_APCUP_VERSION "1.0.0"
+
 #ifdef PHP_WIN32
 #	define PHP_APCUP_API __declspec(dllexport)
 #elif defined(__GNUC__) && __GNUC__ >= 4

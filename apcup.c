@@ -120,16 +120,14 @@ zend_module_entry apcup_module_entry = {
 #endif
     NULL,
     apcup_deps,
-	"apcup",
+	PHP_APCUP_EXTNAME,
 	apcup_functions,
 	PHP_MINIT(apcup),
 	PHP_MSHUTDOWN(apcup),
 	PHP_RINIT(apcup),
 	NULL,
 	PHP_MINFO(apcup),
-#if ZEND_MODULE_API_NO >= 20010901
-	"0.1",
-#endif
+	PHP_APCUP_VERSION,
 	STANDARD_MODULE_PROPERTIES
 };
 /* }}} */
