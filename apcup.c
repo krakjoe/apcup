@@ -124,7 +124,7 @@ zend_module_entry apcup_module_entry = {
 	apcup_functions,
 	PHP_MINIT(apcup),
 	PHP_MSHUTDOWN(apcup),
-	NULL,
+	PHP_RINIT(apcup),
 	NULL,
 	PHP_MINFO(apcup),
 #if ZEND_MODULE_API_NO >= 20010901
@@ -136,6 +136,9 @@ zend_module_entry apcup_module_entry = {
 
 #ifdef COMPILE_DL_APCUP
 ZEND_GET_MODULE(apcup)
+#ifdef ZTS
+ZEND_TSRMLS_CACHE_DEFINE();
+#endif
 #endif
 
 /* {{{ PHP_INI
@@ -463,6 +466,16 @@ PHP_MSHUTDOWN_FUNCTION(apcup)
 	return SUCCESS;
 }
 /* }}} */
+
+/* {{{ */
+PHP_RINIT_FUNCTION(apcup) 
+{
+#if defined(ZTS) && defined(COMPILE_DL_APCUP)
+	ZEND_TSRMLS_CACHE_UPDATE();
+#endif
+
+	return SUCCESS;
+} /* }}} */
 
 /* {{{ PHP_MINFO_FUNCTION
  */

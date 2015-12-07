@@ -76,6 +76,7 @@ typedef struct apcup_t {
 apc_sma_api_decl(apcups); /* }}} */
 
 /* {{{ module stuff */
+PHP_RINIT_FUNCTION(apcup);
 PHP_MINIT_FUNCTION(apcup);
 PHP_MSHUTDOWN_FUNCTION(apcup);
 PHP_MINFO_FUNCTION(apcup); /* }}} */
@@ -124,6 +125,10 @@ ZEND_END_MODULE_GLOBALS(apcup)
 #define APG(v) TSRMG(apcup_globals_id, zend_apcup_globals *, v)
 #else
 #define APG(v) (apcup_globals.v)
+#endif
+
+#if defined(ZTS) && defined(COMPILE_DL_APCUP)
+ZEND_TSRMLS_CACHE_EXTERN();
 #endif
 
 #endif	/* PHP_APCUP_H */
