@@ -5,7 +5,7 @@ ARG_ENABLE("apcup", "enable apcup support", "no");
 
 if (PHP_APCUP != "no") {
 	if (PHP_APCU == "yes" && ADD_EXTENSION_DEP('apcup', 'apcu')) {
-		EXTENSION("apcup", "apcup.c");
+		EXTENSION("apcup", "apcup.c", PHP_APCUP_SHARED, "/DZEND_ENABLE_STATIC_TSRMLS_CACHE=1");
 	} else {
 		WARNING("apcup support can't be enabled, apcu is not enabled")
 		PHP_APCUP = "no"
