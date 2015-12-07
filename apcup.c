@@ -160,7 +160,7 @@ PHP_INI_END()
  * assumes you hold a lock on the cache list while this occurs
  * will return 0L if not found
  */
-static inline int apcup_cache_id(char* name, zend_uint nlength TSRMLS_DC) {
+static inline int apcup_cache_id(char* name, size_t nlength TSRMLS_DC) {
     if (apcup && apcup->meta) {
         int current = 0, end = apcup->meta->end;
         {
@@ -183,7 +183,7 @@ static inline int apcup_cache_id(char* name, zend_uint nlength TSRMLS_DC) {
  * apcup_cache_find
  * find a previously registered cache by id
  */
-static inline apcup_cache_t* apcup_cache_find(zend_uint id TSRMLS_DC) {
+static inline apcup_cache_t* apcup_cache_find(zend_long id TSRMLS_DC) {
     if (apcup && apcup->meta) {
         apcup_cache_t* found = NULL;
         {
@@ -214,11 +214,11 @@ static inline apcup_cache_t* apcup_cache_find(zend_uint id TSRMLS_DC) {
  * @slam_defense enable/disable slam defense for this specific cache
  */
 static inline zend_bool apcup_create_cache(char *name, 
-                                           zend_uint nlength,
-                                           zend_ulong entries_hint,
-                                           zend_ulong gc_ttl,
-                                           zend_ulong ttl,
-                                           zend_ulong smart,
+                                           size_t nlength,
+                                           zend_long entries_hint,
+                                           zend_long gc_ttl,
+                                           zend_long ttl,
+                                           zend_long smart,
                                            zend_bool slam_defense TSRMLS_DC) {
     zend_bool result = 0;
     
@@ -482,19 +482,18 @@ PHP_MINFO_FUNCTION(apcup)
 PHP_FUNCTION(apcup_create) 
 {
     if (apcups.initialized) {
-        char *name = NULL;
-        zend_uint nlength = 0L;
-        zend_ulong entries_hint = 1024;
-        zend_ulong gc_ttl = 0L;
-        zend_ulong ttl = 0L;
-        zend_ulong smart = 0L;
+        zend_string *name = NULL;
+        zend_long entries_hint = 1024;
+        zend_long gc_ttl = 0L;
+        zend_long ttl = 0L;
+        zend_long smart = 0L;
         zend_bool slam_defense = 1;
         
-        if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "s|llllb", &name, &nlength, &entries_hint, &gc_ttl, &ttl, &smart, &slam_defense) != SUCCESS) {
+        if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "S|llllb", &name, &entries_hint, &gc_ttl, &ttl, &smart, &slam_defense) != SUCCESS) {
             return;
         }
         
-        RETURN_BOOL(apcup_create_cache(name, nlength, entries_hint, gc_ttl, ttl, smart, slam_defense TSRMLS_CC));
+        RETURN_BOOL(apcup_create_cache(ZSTR_VAL(name), ZSTR_LEN(name), entries_hint, gc_ttl, ttl, smart, slam_defense TSRMLS_CC));
     }
 } /* }}} */
 
@@ -504,20 +503,19 @@ PHP_FUNCTION(apcup_create)
 PHP_FUNCTION(apcup_set)
 {
     if (apcups.initialized) {
-        zend_ulong cache = 0L;
-        char *key = NULL;
-        zend_uint klen = 0L;
-        zend_uint ttl = 0L;
+        zend_long cache = 0L;
+        zend_string *key = NULL;
+        zend_long ttl = 0L;
         zval *pzval = NULL;
-        
-        if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "lsz|l", &cache, &key, &klen, &pzval, &ttl) != SUCCESS) {
+
+        if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "lSz|l", &cache, &key, &pzval, &ttl) != SUCCESS) {
             return;
         }
-        
+
         {
             apcup_cache_t* pooled = apcup_cache_find(cache TSRMLS_CC);
             if (pooled) {
-                ZVAL_BOOL(return_value, apc_cache_store(&pooled->cache, key, klen+1, pzval, ttl, 1 TSRMLS_CC));  
+                ZVAL_BOOL(return_value, apc_cache_store(&pooled->cache, key, pzval, ttl, 1 TSRMLS_CC));  
             } else zend_error(E_WARNING, "APCu could not find the requested cache (%d)", cache);
         }
     }
@@ -528,11 +526,10 @@ PHP_FUNCTION(apcup_set)
 PHP_FUNCTION(apcup_get)
 {
     if (apcups.initialized) {
-        zend_ulong cache;
-        char *key;
-        zend_uint klen;
+        zend_long cache;
+        zend_string *key = NULL;
         
-        if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "ls", &cache, &key, &klen) != SUCCESS) {
+        if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "lS", &cache, &key) != SUCCESS) {
             return;
         }
         
@@ -541,7 +538,7 @@ PHP_FUNCTION(apcup_get)
             apcup_cache_t* pooled = apcup_cache_find(cache TSRMLS_CC);
                
             if (pooled) {
-                if (!apc_cache_fetch(&pooled->cache, key, klen+1, time(0), &return_value TSRMLS_CC)) {
+                if (!apc_cache_fetch(&pooled->cache, key, time(0), &return_value TSRMLS_CC)) {
                     /* not found */
                 }
             } else zend_error(E_WARNING, "APCu could not find the requested cache (%d)", cache);
@@ -554,8 +551,8 @@ PHP_FUNCTION(apcup_get)
 PHP_FUNCTION(apcup_info)
 {
     if (apcups.initialized) {
-        zend_ulong cache;
-    
+        zend_long cache = 0L;
+
         if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "l", &cache) != SUCCESS) {
             return;
         }
@@ -571,10 +568,10 @@ PHP_FUNCTION(apcup_info)
                     apcup_cache_t* pooled = apcup_cache_find(cache TSRMLS_CC);
                        
                     if (pooled) {
-                       zval* info = apc_cache_info(&pooled->cache, 0 TSRMLS_CC);
-                       
-                       if (info) {
-                           ZVAL_ZVAL(return_value, info, 1, 1);
+                       zval info = apc_cache_info(&pooled->cache, 0 TSRMLS_CC);
+
+                       if (Z_TYPE(info) != IS_UNDEF) {
+                           ZVAL_COPY(return_value, &info);
                        } else ZVAL_NULL(return_value);
                     } else zend_error(E_WARNING, "APCu could not find the requested cache (%d)", cache);
                 }
@@ -588,8 +585,8 @@ PHP_FUNCTION(apcup_info)
 PHP_FUNCTION(apcup_clear)
 {
     if (apcups.initialized) {
-        zend_ulong cache;
-    
+        zend_long cache = 0L;
+
         if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "l", &cache) != SUCCESS) {
             return;
         }
@@ -597,7 +594,7 @@ PHP_FUNCTION(apcup_clear)
         
         {
             apcup_cache_t* pooled = apcup_cache_find(cache TSRMLS_CC);
-                
+
             if (pooled) {
                 apc_cache_clear(&pooled->cache TSRMLS_CC);
             } else zend_error(E_WARNING, "APCu could not find the requested cache (%d)", cache);

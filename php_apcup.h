@@ -49,7 +49,7 @@ struct apcup_cache_t {
     int              id;
     /* name data (copied) */
     char*            name;
-	zend_uint        nlength;
+	size_t           nlength;
 	/* APCu cache */
 	apc_cache_t      cache;
 }; /* }}} */
